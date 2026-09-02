@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Panel Admin · Radio Web</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+  <header class="admin-header">
+    <h1>Panel administrador</h1>
+    <button id="btn-logout" class="btn btn--ghost">Cerrar sesión</button>
+  </header>
+
+  <main class="admin-wrap">
+    <form id="form-admin">
+      <div class="panel">
+        <h2 class="panel__title">Datos generales</h2>
+
+        <div class="field">
+          <label for="input-nombre">Nombre del proyecto</label>
+          <input type="text" id="input-nombre" required />
+        </div>
+
+        <div class="field">
+          <label for="input-tiktok">Usuario de TikTok (sin @)</label>
+          <input type="text" id="input-tiktok" required />
+        </div>
+
+        <div class="field">
+          <label for="input-banner">URL del banner publicitario</label>
+          <input type="url" id="input-banner" placeholder="https://..." />
+          <p class="hint">Dejalo vacío para no mostrar publicidad.</p>
+        </div>
+      </div>
+
+      <div class="panel section-gap">
+        <h2 class="panel__title">Novedades</h2>
+        <div id="novedades-container"></div>
+        <button type="button" id="btn-add-novedad" class="btn btn--ghost">+ Agregar novedad</button>
+      </div>
+
+      <div class="section-gap">
+        <button type="submit" class="btn btn--full" id="btn-guardar">Guardar cambios</button>
+        <p id="status" class="status-msg"></p>
+      </div>
+    </form>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/config.js"></script>
+  <script>
+    const status = document.getElementById("status");
+    const btnGuardar = document.getElementById("btn-guardar");
+    const novedadesContainer = document.getElementById("novedades-container");
+    let novedadIdSeq = 0;
+
+    function setStatus(msg, state) {
+      status.textContent = msg;
+      status.dataset.state = state || "";
+    }
+
+    // --- Protección de la página: sin sesión, afuera. ---
+    async function exigirSesion() {
+      const { data } = await supabaseClient.auth.getSession();
+      if (!data.session) {
+        window.location.href = "login.html";
+        return null;
+      }
+      return data.session;
+    }
+
+    document.getElementById("btn-logout").addEventListener("click", async () => {
+      await supabaseClient.auth.signOut();
+      window.location.href = "login.html";
+    });
+
+    // --- Fila editable de novedad ---
+    function agregarFilaNovedad(titulo = "", descripcion = "") {
+      const id = `nov-${novedadIdSeq++}`;
+      const row = document.createElement("div");
+      row.className = "novedad-row";
+      row.dataset.rowId = id;
+      row.innerHTML = `
+        <div class="novedad-row__top">
+          <span class="novedad-row__index">Novedad</span>
+          <button type="button" class="link-remove">Quitar</button>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>Título</label>
+          <input type="text" class="nov-titulo" value="${escapeAttr(titulo)}" required />
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>Descripción</label>
+          <textarea class="nov-desc" required>${escapeHtml(descripcion)}</textarea>
+        </div>
+      `;
+      row.querySelector(".link-remove").addEventListener("click", () => row.remove());
+      novedadesContainer.appendChild(row);
+    }
+
+    document.getElementById("btn-add-novedad").addEventListener("click", () => {
+      agregarFilaNovedad();
+    });
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str || "";
+      return div.innerHTML;
+    }
+    function escapeAttr(str) {
+      return (str || "").replace(/"/g, "&quot;");
+    }
+
+    // --- Cargar datos actuales ---
+    async function cargarDatos() {
+      const { data, error } = await supabaseClient
+        .from("configuracion")
+        .select("*")
+        .eq("id", 1)
+        .single();
+
+      if (error || !data) {
+        setStatus("No se pudieron cargar los datos actuales.", "error");
+        return;
+      }
+
+      document.getElementById("input-nombre").value = data.nombre_radio || "";
+      document.getElementById("input-tiktok").value = data.usuario_tiktok || "";
+      document.getElementById("input-banner").value = data.publicidad_url || "";
+
+      const novedades = Array.isArray(data.novedades) ? data.novedades : [];
+      novedadesContainer.innerHTML = "";
+      novedades.forEach((n) => agregarFilaNovedad(n.titulo, n.descripcion));
+    }
+
+    // --- Guardar cambios ---
+    document.getElementById("form-admin").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      btnGuardar.disabled = true;
+      setStatus("Guardando…", "loading");
+
+      const novedades = Array.from(novedadesContainer.querySelectorAll(".novedad-row")).map((row) => ({
+        titulo: row.querySelector(".nov-titulo").value.trim(),
+        descripcion: row.querySelector(".nov-desc").value.trim(),
+      }));
+
+      const { error } = await supabaseClient
+        .from("configuracion")
+        .update({
+          nombre_radio: document.getElementById("input-nombre").value.trim(),
+          usuario_tiktok: document.getElementById("input-tiktok").value.trim().replace(/^@/, ""),
+          publicidad_url: document.getElementById("input-banner").value.trim() || null,
+          novedades,
+        })
+        .eq("id", 1);
+
+      btnGuardar.disabled = false;
+
+      if (error) {
+        setStatus("Error al guardar: " + error.message, "error");
+      } else {
+        setStatus("Cambios guardados con éxito.", "ok");
+      }
+    });
+
+    // --- Arranque ---
+    (async () => {
+      const session = await exigirSesion();
+      if (session) cargarDatos();
+    })();
+  </script>
+</body>
+</html>

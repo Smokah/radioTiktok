@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title id="page-title">Radio en vivo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+  <header class="topbar">
+    <span class="on-air">
+      <span class="on-air__dot" aria-hidden="true"></span>
+      AL AIRE
+    </span>
+    <span id="topbar-handle" class="topbar__handle">@...</span>
+  </header>
+
+  <section class="hero">
+    <div>
+      <h1 id="hero-nombre" class="hero__name">Cargando…</h1>
+      <p class="hero__tag">Transmisión en vivo desde TikTok. Seguinos para no perderte nada.</p>
+    </div>
+    <div class="eq" aria-hidden="true">
+      <span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
+  </section>
+
+  <main class="wrap">
+    <section class="console">
+      <div class="console__inner">
+        <span class="console__label">REPRODUCTOR</span>
+        <p style="margin:0; max-width:36ch;">
+          Acá va el embed del vivo de TikTok o el reproductor de streaming.
+        </p>
+      </div>
+    </section>
+
+    <aside>
+      <div class="panel">
+        <h2 class="panel__title">Novedades</h2>
+        <ul id="lista-novedades" class="novedades">
+          <li class="novedades__vacio">Sin novedades por el momento.</li>
+        </ul>
+      </div>
+
+      <div class="panel">
+        <h2 class="panel__title">Publicidad</h2>
+        <div id="banner-slot" class="banner-slot">Espacio disponible</div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <span id="footer-nombre">Radio</span> · transmitiendo en directo
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="assets/config.js"></script>
+  <script>
+    async function cargarConfiguracion() {
+      const { data, error } = await supabaseClient
+        .from("configuracion")
+        .select("*")
+        .eq("id", 1)
+        .single();
+
+      if (error || !data) {
+        console.error("No se pudo cargar la configuración:", error);
+        document.getElementById("hero-nombre").textContent = "Radio";
+        return;
+      }
+
+      document.getElementById("page-title").textContent = data.nombre_radio;
+      document.getElementById("hero-nombre").textContent = data.nombre_radio;
+      document.getElementById("footer-nombre").textContent = data.nombre_radio;
+      document.getElementById("topbar-handle").textContent = `@${data.usuario_tiktok || "..."}`;
+
+      const lista = document.getElementById("lista-novedades");
+      const novedades = Array.isArray(data.novedades) ? data.novedades : [];
+
+      if (novedades.length === 0) {
+        lista.innerHTML = '<li class="novedades__vacio">Sin novedades por el momento.</li>';
+      } else {
+        lista.innerHTML = novedades
+          .map(
+            (nov) => `
+              <li>
+                <span class="novedades__titulo">${escapeHtml(nov.titulo || "")}</span>
+                <span class="novedades__desc">${escapeHtml(nov.descripcion || "")}</span>
+              </li>`
+          )
+          .join("");
+      }
+
+      const bannerSlot = document.getElementById("banner-slot");
+      if (data.publicidad_url) {
+        bannerSlot.innerHTML = `<img src="${escapeHtml(data.publicidad_url)}" alt="Publicidad">`;
+      }
+    }
+
+    // Evita que texto guardado en la base (novedades, etc.) pueda
+    // inyectar HTML/JS en la página pública.
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    cargarConfiguracion();
+  </script>
+</body>
+</html>
