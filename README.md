@@ -96,10 +96,99 @@ usuario que creaste en el paso 2, y vas a caer en `admin.html`.
   RLS y escribir sus políticas — por defecto Supabase bloquea todo
   acceso a una tabla sin política explícita.
 
+## Sobre el reproductor de TikTok
+
+TikTok **no ofrece una forma oficial de embeber un LIVE** dentro de un
+sitio externo (a diferencia de sus videos publicados, que sí tienen
+oEmbed). Por eso el sitio usa **YouTube Live** para el reproductor
+embebido, y muestra además un botón a TikTok para quienes prefieran
+verlo ahí.
+
+### Cómo conseguir tu ID de canal de YouTube
+
+1. Entrá a tu canal de YouTube desde una compu.
+2. **Configuración del canal > Configuración avanzada** (o
+   `Personalización del canal > Básica`, según la versión de YouTube
+   Studio) — ahí figura el **"ID de canal"**, algo como
+   `UCxxxxxxxxxxxxxxxxxxxxxx`.
+3. Pegalo en el campo "ID del canal de YouTube" del panel admin.
+
+Ese ID no cambia nunca, así que lo cargás una sola vez: el reproductor
+va a mostrar automáticamente cualquier transmisión en vivo que hagas
+en ese canal, sin tener que tocar nada de nuevo cada vez que salís al
+aire.
+
+### Cómo transmitir a YouTube y TikTok al mismo tiempo (multistream)
+
+Para no perder tu audiencia de TikTok mientras ganás el reproductor
+embebido:
+
+1. Instalá [OBS Studio](https://obsproducer.com) (gratis) en la compu
+   desde la que vas a transmitir.
+2. Activá el plugin de multistream (built-in en versiones recientes de
+   OBS, o el plugin gratuito "Multiple RTMP Outputs" en versiones
+   viejas).
+3. Cargá las claves de transmisión (stream key) de YouTube Live y de
+   TikTok LIVE Studio en OBS — cada plataforma te la da en su propio
+   panel de "ir en vivo".
+4. Al arrancar la transmisión en OBS, sale simultáneamente en los dos
+   lugares.
+
+Si no querés usar OBS, también podés transmitir nativamente desde la
+app de YouTube (o YouTube Studio) por un lado y desde TikTok por otro,
+pero ahí sí tenés que iniciar cada transmisión por separado.
+
+## Funciones de fidelización
+
+Se agregaron cuatro herramientas para mantener a la audiencia conectada
+al sitio mientras escucha. Todas requieren correr
+`supabase/migracion_fidelizacion.sql` en el SQL Editor de Supabase
+antes de usarlas.
+
+### Estado en vivo
+
+El badge "AL AIRE / FUERA DE AIRE" de la página pública ahora refleja
+un estado real, cargado desde el checkbox "Estamos en vivo ahora
+mismo" en el panel admin. Se actualiza en tiempo real (sin recargar
+la página) gracias a Supabase Realtime.
+
+### Encuesta en vivo
+
+Desde el admin se crea una pregunta con sus opciones y se publica:
+eso desactiva automáticamente cualquier encuesta anterior y activa la
+nueva. En la página pública, cada visitante vota una sola vez (se
+recuerda con `localStorage` en su navegador — si borra los datos del
+sitio o entra desde otro dispositivo, puede volver a votar; para el
+volumen de este proyecto es una limitación aceptable). Los resultados
+se actualizan en vivo para todos los que están mirando en ese momento.
+
+El voto pasa por una función de base de datos (`votar_encuesta`) que
+solo puede sumar un voto a una opción — nunca puede editar la
+pregunta ni las opciones — así que es seguro que cualquiera la use
+sin necesitar una cuenta.
+
+### Sorteo
+
+Se crea con título y premio opcional desde el admin, y activa
+automáticamente el formulario de inscripción en la página pública
+(nombre + usuario de TikTok o teléfono). La lista de participantes
+**no es pública** — solo el admin autenticado puede verla, por
+privacidad de los datos de contacto. Desde el panel admin, el botón
+"Sortear ganador/a" elige uno al azar entre los anotados.
+
+### Muro de mensajes
+
+Cualquiera puede dejar un mensaje corto (nombre + texto, hasta 240
+caracteres) que aparece en la página pública en tiempo real para
+todos los visitantes. Desde el admin se puede borrar cualquier
+mensaje inapropiado. Es un espacio público sin moderación previa
+— los mensajes se publican al instante y se moderan después. Si en
+el futuro esto recibe mucho tráfico y aparece spam, la mejora
+natural es agregar moderación previa (mensajes ocultos hasta que el
+admin los aprueba) o un captcha en el formulario.
+
 ## Ideas para seguir
 
-- Reemplazar el bloque `console__inner` de `index.html` por el embed
-  real del vivo de TikTok o el reproductor de streaming que uses.
 - Agregar un campo `activo` (boolean) a cada novedad para poder
   ocultarla sin borrarla.
 - Guardar un historial de cambios (tabla `configuracion_historial`)

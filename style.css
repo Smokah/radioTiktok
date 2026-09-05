@@ -166,6 +166,8 @@ a { color: inherit; }
   flex: 1;
 }
 
+.wrap--single { grid-template-columns: 1fr; }
+
 @media (max-width: 860px) {
   .wrap { grid-template-columns: 1fr; }
   .hero { grid-template-columns: 1fr; }
@@ -453,3 +455,118 @@ a { color: inherit; }
   color: var(--text-muted);
   margin-top: 6px;
 }
+
+/* =========================================================
+   Fidelización: estado en vivo, encuesta, sorteo, muro
+   ========================================================= */
+
+.on-air[data-live="false"] { color: var(--text-muted); }
+.on-air[data-live="false"] .on-air__dot {
+  background: var(--text-muted);
+  animation: none;
+  box-shadow: none;
+}
+
+/* ---- encuesta ---- */
+.encuesta__pregunta {
+  font-size: 14.5px;
+  margin: 0 0 12px;
+  color: var(--text);
+}
+
+.encuesta__opcion {
+  position: relative;
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.encuesta__opcion:hover { border-color: var(--amber); }
+.encuesta__opcion:disabled { cursor: default; }
+
+.encuesta__opcion__fill {
+  position: absolute;
+  inset: 0;
+  width: 0%;
+  background: var(--amber-soft);
+  border-right: 2px solid var(--amber);
+  transition: width 0.4s ease;
+}
+
+.encuesta__opcion__row {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.encuesta__opcion__pct {
+  font-family: "IBM Plex Mono", monospace;
+  color: var(--text-muted);
+}
+
+.encuesta__vacio { color: var(--text-muted); font-size: 13.5px; }
+
+/* ---- sorteo ---- */
+.sorteo__premio {
+  color: var(--amber);
+  font-weight: 600;
+  font-size: 14px;
+  margin: 0 0 4px;
+}
+
+.sorteo__titulo { margin: 0 0 4px; font-size: 15px; }
+
+/* ---- muro de mensajes ---- */
+.muro-form {
+  display: grid;
+  grid-template-columns: 1fr 2fr auto;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 500px) {
+  .muro-form { grid-template-columns: 1fr; }
+}
+
+.muro-form input {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 9px 10px;
+  font-family: var(--font-body);
+  font-size: 13.5px;
+}
+
+.muro-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.muro-lista li {
+  border-top: 1px solid var(--line);
+  padding: 9px 0;
+  font-size: 13.5px;
+}
+
+.muro-lista li:first-child { border-top: none; }
+
+.muro-lista__nombre {
+  color: var(--amber);
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.muro-lista__vacio { color: var(--text-muted); font-size: 13.5px; }

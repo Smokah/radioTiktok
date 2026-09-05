@@ -21,6 +21,11 @@
       <div class="panel">
         <h2 class="panel__title">Datos generales</h2>
 
+        <div class="field" style="display:flex; align-items:center; gap:10px;">
+          <input type="checkbox" id="input-en-vivo" style="width:auto;" />
+          <label for="input-en-vivo" style="margin:0;">Estamos en vivo ahora mismo</label>
+        </div>
+
         <div class="field">
           <label for="input-nombre">Nombre del proyecto</label>
           <input type="text" id="input-nombre" required />
@@ -36,6 +41,16 @@
           <input type="url" id="input-banner" placeholder="https://..." />
           <p class="hint">Dejalo vacío para no mostrar publicidad.</p>
         </div>
+
+        <div class="field">
+          <label for="input-youtube">ID del canal de YouTube</label>
+          <input type="text" id="input-youtube" placeholder="UCxxxxxxxxxxxxxxxxxxxxxx" />
+          <p class="hint">
+            Se usa para mostrar el reproductor embebido de tu transmisión en vivo
+            (sea cual sea el video, siempre que estés en vivo en ese canal).
+            Dejalo vacío si todavía no vas a transmitir por YouTube.
+          </p>
+        </div>
       </div>
 
       <div class="panel section-gap">
@@ -49,6 +64,51 @@
         <p id="status" class="status-msg"></p>
       </div>
     </form>
+    <div class="panel section-gap">
+      <h2 class="panel__title">Encuesta en vivo</h2>
+
+      <div id="encuesta-activa-admin" class="hint">Cargando…</div>
+
+      <h3 style="font-size:14px; margin:20px 0 10px;">Nueva encuesta</h3>
+      <div class="field">
+        <label for="input-encuesta-pregunta">Pregunta</label>
+        <input type="text" id="input-encuesta-pregunta" maxlength="140" />
+      </div>
+      <div id="encuesta-opciones-container"></div>
+      <button type="button" id="btn-add-opcion" class="btn btn--ghost">+ Agregar opción</button>
+      <div class="section-gap">
+        <button type="button" id="btn-crear-encuesta" class="btn">Publicar y activar</button>
+        <p id="status-encuesta" class="status-msg"></p>
+      </div>
+    </div>
+
+    <div class="panel section-gap">
+      <h2 class="panel__title">Sorteo</h2>
+
+      <div id="sorteo-activo-admin" class="hint">Cargando…</div>
+
+      <h3 style="font-size:14px; margin:20px 0 10px;">Nuevo sorteo</h3>
+      <div class="field">
+        <label for="input-sorteo-titulo">Título</label>
+        <input type="text" id="input-sorteo-titulo" maxlength="120" />
+      </div>
+      <div class="field">
+        <label for="input-sorteo-premio">Premio (opcional)</label>
+        <input type="text" id="input-sorteo-premio" maxlength="120" />
+      </div>
+      <div class="section-gap">
+        <button type="button" id="btn-crear-sorteo" class="btn">Crear y activar</button>
+        <p id="status-sorteo" class="status-msg"></p>
+      </div>
+    </div>
+
+    <div class="panel section-gap">
+      <h2 class="panel__title">Muro de mensajes</h2>
+      <button type="button" id="btn-refrescar-muro" class="btn btn--ghost" style="margin-bottom:14px;">Actualizar</button>
+      <ul id="muro-lista-admin" class="muro-lista">
+        <li class="muro-lista__vacio">Cargando…</li>
+      </ul>
+    </div>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -129,9 +189,11 @@
         return;
       }
 
+      document.getElementById("input-en-vivo").checked = !!data.en_vivo;
       document.getElementById("input-nombre").value = data.nombre_radio || "";
       document.getElementById("input-tiktok").value = data.usuario_tiktok || "";
       document.getElementById("input-banner").value = data.publicidad_url || "";
+      document.getElementById("input-youtube").value = data.youtube_channel_id || "";
 
       const novedades = Array.isArray(data.novedades) ? data.novedades : [];
       novedadesContainer.innerHTML = "";
@@ -152,9 +214,11 @@
       const { error } = await supabaseClient
         .from("configuracion")
         .update({
+          en_vivo: document.getElementById("input-en-vivo").checked,
           nombre_radio: document.getElementById("input-nombre").value.trim(),
           usuario_tiktok: document.getElementById("input-tiktok").value.trim().replace(/^@/, ""),
           publicidad_url: document.getElementById("input-banner").value.trim() || null,
+          youtube_channel_id: document.getElementById("input-youtube").value.trim() || null,
           novedades,
         })
         .eq("id", 1);
@@ -168,10 +232,226 @@
       }
     });
 
+    // =====================================================
+    // Encuesta en vivo
+    // =====================================================
+    const opcionesContainer = document.getElementById("encuesta-opciones-container");
+    let opcionIdSeq = 0;
+
+    function agregarFilaOpcion(texto = "") {
+      const row = document.createElement("div");
+      row.className = "novedad-row";
+      row.innerHTML = `
+        <div class="novedad-row__top">
+          <span class="novedad-row__index">Opción</span>
+          <button type="button" class="link-remove">Quitar</button>
+        </div>
+        <input type="text" class="opcion-texto" placeholder="Texto de la opción" value="${escapeAttr(texto)}" maxlength="80" />
+      `;
+      row.querySelector(".link-remove").addEventListener("click", () => row.remove());
+      opcionesContainer.appendChild(row);
+    }
+
+    document.getElementById("btn-add-opcion").addEventListener("click", () => agregarFilaOpcion());
+    agregarFilaOpcion();
+    agregarFilaOpcion();
+
+    async function cargarEncuestaAdmin() {
+      const cont = document.getElementById("encuesta-activa-admin");
+      const { data } = await supabaseClient
+        .from("encuestas")
+        .select("*")
+        .eq("activa", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!data) {
+        cont.innerHTML = "No hay ninguna encuesta activa en este momento.";
+        return;
+      }
+
+      const opciones = Array.isArray(data.opciones) ? data.opciones : [];
+      const total = opciones.reduce((acc, o) => acc + (o.votos || 0), 0);
+
+      cont.innerHTML = `
+        <p style="margin:0 0 8px;"><strong>${escapeHtml(data.pregunta)}</strong> (${total} votos)</p>
+        <ul style="margin:0 0 12px; padding-left:18px;">
+          ${opciones.map((o) => `<li>${escapeHtml(o.texto)}: ${o.votos || 0}</li>`).join("")}
+        </ul>
+        <button type="button" class="btn btn--ghost" id="btn-finalizar-encuesta">Finalizar esta encuesta</button>
+      `;
+
+      document.getElementById("btn-finalizar-encuesta").addEventListener("click", async () => {
+        await supabaseClient.from("encuestas").update({ activa: false }).eq("id", data.id);
+        cargarEncuestaAdmin();
+      });
+    }
+
+    document.getElementById("btn-crear-encuesta").addEventListener("click", async () => {
+      const statusEl = document.getElementById("status-encuesta");
+      const pregunta = document.getElementById("input-encuesta-pregunta").value.trim();
+      const textos = Array.from(opcionesContainer.querySelectorAll(".opcion-texto"))
+        .map((i) => i.value.trim())
+        .filter(Boolean);
+
+      if (!pregunta || textos.length < 2) {
+        statusEl.textContent = "Cargá una pregunta y al menos 2 opciones.";
+        statusEl.dataset.state = "error";
+        return;
+      }
+
+      statusEl.textContent = "Publicando…";
+      statusEl.dataset.state = "loading";
+
+      const opciones = textos.map((texto, i) => ({ id: `op${i + 1}`, texto, votos: 0 }));
+
+      // Desactiva cualquier encuesta anterior antes de publicar la nueva.
+      await supabaseClient.from("encuestas").update({ activa: false }).eq("activa", true);
+
+      const { error } = await supabaseClient.from("encuestas").insert({ pregunta, opciones, activa: true });
+
+      if (error) {
+        statusEl.textContent = "Error al publicar: " + error.message;
+        statusEl.dataset.state = "error";
+        return;
+      }
+
+      statusEl.textContent = "Encuesta publicada y activa.";
+      statusEl.dataset.state = "ok";
+      document.getElementById("input-encuesta-pregunta").value = "";
+      opcionesContainer.innerHTML = "";
+      agregarFilaOpcion();
+      agregarFilaOpcion();
+      cargarEncuestaAdmin();
+    });
+
+    // =====================================================
+    // Sorteo
+    // =====================================================
+    async function cargarSorteoAdmin() {
+      const cont = document.getElementById("sorteo-activo-admin");
+      const { data } = await supabaseClient
+        .from("sorteos")
+        .select("*")
+        .eq("activo", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!data) {
+        cont.innerHTML = "No hay ningún sorteo activo en este momento.";
+        return;
+      }
+
+      const { data: participantes } = await supabaseClient
+        .from("sorteo_participantes")
+        .select("*")
+        .eq("sorteo_id", data.id)
+        .order("created_at", { ascending: true });
+
+      const lista = participantes || [];
+
+      cont.innerHTML = `
+        <p style="margin:0 0 4px;"><strong>${escapeHtml(data.titulo)}</strong></p>
+        ${data.premio ? `<p style="margin:0 0 8px;">Premio: ${escapeHtml(data.premio)}</p>` : ""}
+        <p style="margin:0 0 10px;">${lista.length} persona(s) anotada(s).</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button type="button" class="btn" id="btn-sortear" ${lista.length === 0 ? "disabled" : ""}>Sortear ganador/a</button>
+          <button type="button" class="btn btn--ghost" id="btn-finalizar-sorteo">Finalizar sorteo</button>
+        </div>
+        <p id="resultado-sorteo" style="margin-top:14px; font-weight:600;"></p>
+      `;
+
+      document.getElementById("btn-sortear").addEventListener("click", () => {
+        const ganador = lista[Math.floor(Math.random() * lista.length)];
+        document.getElementById("resultado-sorteo").textContent =
+          `🎉 Ganador/a: ${ganador.nombre} (${ganador.contacto})`;
+      });
+
+      document.getElementById("btn-finalizar-sorteo").addEventListener("click", async () => {
+        await supabaseClient.from("sorteos").update({ activo: false }).eq("id", data.id);
+        cargarSorteoAdmin();
+      });
+    }
+
+    document.getElementById("btn-crear-sorteo").addEventListener("click", async () => {
+      const statusEl = document.getElementById("status-sorteo");
+      const titulo = document.getElementById("input-sorteo-titulo").value.trim();
+      const premio = document.getElementById("input-sorteo-premio").value.trim();
+
+      if (!titulo) {
+        statusEl.textContent = "Cargá un título para el sorteo.";
+        statusEl.dataset.state = "error";
+        return;
+      }
+
+      statusEl.textContent = "Creando…";
+      statusEl.dataset.state = "loading";
+
+      await supabaseClient.from("sorteos").update({ activo: false }).eq("activo", true);
+
+      const { error } = await supabaseClient
+        .from("sorteos")
+        .insert({ titulo, premio: premio || null, activo: true });
+
+      if (error) {
+        statusEl.textContent = "Error al crear: " + error.message;
+        statusEl.dataset.state = "error";
+        return;
+      }
+
+      statusEl.textContent = "Sorteo creado y activo.";
+      statusEl.dataset.state = "ok";
+      document.getElementById("input-sorteo-titulo").value = "";
+      document.getElementById("input-sorteo-premio").value = "";
+      cargarSorteoAdmin();
+    });
+
+    // =====================================================
+    // Muro de mensajes (moderación)
+    // =====================================================
+    async function cargarMuroAdmin() {
+      const { data } = await supabaseClient
+        .from("mensajes_muro")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      const lista = document.getElementById("muro-lista-admin");
+      const mensajes = data || [];
+
+      lista.innerHTML = mensajes.length
+        ? mensajes
+            .map(
+              (m) => `
+                <li style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                  <span><span class="muro-lista__nombre">${escapeHtml(m.nombre)}</span>${escapeHtml(m.mensaje)}</span>
+                  <button type="button" class="link-remove" data-id="${m.id}">Borrar</button>
+                </li>`
+            )
+            .join("")
+        : '<li class="muro-lista__vacio">Todavía no hay mensajes.</li>';
+
+      lista.querySelectorAll(".link-remove").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          await supabaseClient.from("mensajes_muro").delete().eq("id", btn.dataset.id);
+          cargarMuroAdmin();
+        });
+      });
+    }
+
+    document.getElementById("btn-refrescar-muro").addEventListener("click", cargarMuroAdmin);
+
     // --- Arranque ---
     (async () => {
       const session = await exigirSesion();
-      if (session) cargarDatos();
+      if (session) {
+        cargarDatos();
+        cargarEncuestaAdmin();
+        cargarSorteoAdmin();
+        cargarMuroAdmin();
+      }
     })();
   </script>
 </body>

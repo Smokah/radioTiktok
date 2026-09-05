@@ -12,9 +12,9 @@
 <body>
 
   <header class="topbar">
-    <span class="on-air">
+    <span class="on-air" data-live="false">
       <span class="on-air__dot" aria-hidden="true"></span>
-      AL AIRE
+      <span id="on-air-text">FUERA DE AIRE</span>
     </span>
     <span id="topbar-handle" class="topbar__handle">@...</span>
   </header>
@@ -52,6 +52,36 @@
     </aside>
   </main>
 
+  <section class="wrap">
+    <div class="panel">
+      <h2 class="panel__title">Encuesta en vivo</h2>
+      <div id="encuesta-container">
+        <p class="encuesta__vacio">No hay encuestas activas por el momento.</p>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel__title">Sorteo</h2>
+      <div id="sorteo-container">
+        <p class="encuesta__vacio">No hay sorteos activos por el momento.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap wrap--single">
+    <div class="panel">
+      <h2 class="panel__title">Muro de mensajes</h2>
+      <form id="form-muro" class="muro-form">
+        <input type="text" id="muro-nombre" placeholder="Tu nombre" maxlength="60" required />
+        <input type="text" id="muro-mensaje" placeholder="Escribí un mensaje..." maxlength="240" required />
+        <button type="submit" class="btn">Enviar</button>
+      </form>
+      <ul id="muro-lista" class="muro-lista">
+        <li class="muro-lista__vacio">Todavía no hay mensajes. ¡Sé el primero!</li>
+      </ul>
+    </div>
+  </section>
+
   <footer class="footer">
     <span id="footer-nombre">Radio</span> · transmitiendo en directo
   </footer>
@@ -76,24 +106,35 @@
       document.getElementById("hero-nombre").textContent = data.nombre_radio;
       document.getElementById("footer-nombre").textContent = data.nombre_radio;
       document.getElementById("topbar-handle").textContent = `@${data.usuario_tiktok || "..."}`;
+      aplicarEstadoEnVivo(data.en_vivo);
 
       const consoleContent = document.getElementById("console-content");
-      if (data.usuario_tiktok) {
-        const url = `https://www.tiktok.com/@${encodeURIComponent(data.usuario_tiktok)}/live`;
-        consoleContent.innerHTML = `
-          <span class="console__label">REPRODUCTOR</span>
-          <p style="margin:0; max-width:36ch;">
-            TikTok no permite embeber el vivo directamente en otros sitios.
-            Tocá el botón para verlo en TikTok.
-          </p>
-          <a class="btn" href="${url}" target="_blank" rel="noopener noreferrer">
-            Ver en vivo en TikTok
-          </a>`;
-      } else {
-        consoleContent.innerHTML = `
-          <span class="console__label">REPRODUCTOR</span>
-          <p style="margin:0; max-width:36ch;">Todavía no configuraste un usuario de TikTok.</p>`;
+      const partes = [];
+
+      if (data.youtube_channel_id) {
+        const ytUrl = `https://www.youtube.com/embed/live_stream?channel=${encodeURIComponent(data.youtube_channel_id)}&autoplay=0`;
+        partes.push(`
+          <iframe
+            src="${ytUrl}"
+            style="width:100%; aspect-ratio:16/9; border:0;"
+            allow="autoplay; encrypted-media; picture-in-picture"
+            allowfullscreen
+            title="Transmisión en vivo">
+          </iframe>`);
       }
+
+      if (data.usuario_tiktok) {
+        const ttUrl = `https://www.tiktok.com/@${encodeURIComponent(data.usuario_tiktok)}/live`;
+        partes.push(`
+          <a class="btn" href="${ttUrl}" target="_blank" rel="noopener noreferrer">
+            Ver también en TikTok
+          </a>`);
+      }
+
+      consoleContent.innerHTML = partes.length
+        ? partes.join("")
+        : `<span class="console__label">REPRODUCTOR</span>
+           <p style="margin:0; max-width:36ch;">Todavía no configuraste ningún canal de transmisión.</p>`;
 
       const lista = document.getElementById("lista-novedades");
       const novedades = Array.isArray(data.novedades) ? data.novedades : [];
@@ -126,7 +167,236 @@
       return div.innerHTML;
     }
 
+    // =====================================================
+    // Estado en vivo
+    // =====================================================
+    function aplicarEstadoEnVivo(enVivo) {
+      const badge = document.querySelector(".on-air");
+      const texto = document.getElementById("on-air-text");
+      badge.dataset.live = enVivo ? "true" : "false";
+      texto.textContent = enVivo ? "AL AIRE" : "FUERA DE AIRE";
+    }
+
+    // =====================================================
+    // Encuesta en vivo
+    // =====================================================
+    let encuestaActualId = null;
+
+    function renderEncuesta(encuesta) {
+      encuestaActualId = encuesta.id;
+      const cont = document.getElementById("encuesta-container");
+      const opciones = Array.isArray(encuesta.opciones) ? encuesta.opciones : [];
+      const total = opciones.reduce((acc, o) => acc + (o.votos || 0), 0);
+      const votadoKey = `votado_encuesta_${encuesta.id}`;
+      const yaVoto = !!localStorage.getItem(votadoKey);
+
+      cont.innerHTML = `
+        <p class="encuesta__pregunta">${escapeHtml(encuesta.pregunta)}</p>
+        ${opciones
+          .map((op) => {
+            const pct = total > 0 ? Math.round(((op.votos || 0) / total) * 100) : 0;
+            return `
+              <button type="button" class="encuesta__opcion" data-opcion="${escapeAttr(op.id)}" ${yaVoto ? "disabled" : ""}>
+                <span class="encuesta__opcion__fill" style="width:${yaVoto ? pct : 0}%"></span>
+                <span class="encuesta__opcion__row">
+                  <span>${escapeHtml(op.texto)}</span>
+                  ${yaVoto ? `<span class="encuesta__opcion__pct">${pct}%</span>` : ""}
+                </span>
+              </button>`;
+          })
+          .join("")}
+      `;
+
+      if (!yaVoto) {
+        cont.querySelectorAll(".encuesta__opcion").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            cont.querySelectorAll(".encuesta__opcion").forEach((b) => (b.disabled = true));
+            const opcionId = btn.dataset.opcion;
+            localStorage.setItem(votadoKey, opcionId);
+
+            const { error } = await supabaseClient.rpc("votar_encuesta", {
+              p_encuesta_id: encuesta.id,
+              p_opcion_id: opcionId,
+            });
+
+            if (error) {
+              localStorage.removeItem(votadoKey);
+              console.error("Error al votar:", error);
+              cargarEncuesta();
+            }
+          });
+        });
+      }
+    }
+
+    async function cargarEncuesta() {
+      const { data } = await supabaseClient
+        .from("encuestas")
+        .select("*")
+        .eq("activa", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!data) {
+        encuestaActualId = null;
+        document.getElementById("encuesta-container").innerHTML =
+          '<p class="encuesta__vacio">No hay encuestas activas por el momento.</p>';
+        return;
+      }
+      renderEncuesta(data);
+    }
+
+    supabaseClient
+      .channel("public:encuestas")
+      .on("postgres_changes", { event: "*", schema: "public", table: "encuestas" }, (payload) => {
+        const row = payload.new && Object.keys(payload.new).length ? payload.new : null;
+        if (row && row.activa) {
+          renderEncuesta(row);
+        } else if (encuestaActualId !== null) {
+          // se desactivó o se borró la que estaba activa: buscar otra
+          cargarEncuesta();
+        }
+      })
+      .subscribe();
+
+    // =====================================================
+    // Sorteo
+    // =====================================================
+    async function cargarSorteo() {
+      const { data } = await supabaseClient
+        .from("sorteos")
+        .select("*")
+        .eq("activo", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const cont = document.getElementById("sorteo-container");
+
+      if (!data) {
+        cont.innerHTML = '<p class="encuesta__vacio">No hay sorteos activos por el momento.</p>';
+        return;
+      }
+
+      const key = `anotado_sorteo_${data.id}`;
+      const yaAnotado = localStorage.getItem(key);
+
+      cont.innerHTML = `
+        <p class="sorteo__titulo">${escapeHtml(data.titulo)}</p>
+        ${data.premio ? `<p class="sorteo__premio">Premio: ${escapeHtml(data.premio)}</p>` : ""}
+        ${
+          yaAnotado
+            ? '<p class="hint">Ya estás anotado/a. ¡Mucha suerte!</p>'
+            : `<form id="form-sorteo">
+                <div class="field">
+                  <label for="sorteo-nombre">Nombre</label>
+                  <input type="text" id="sorteo-nombre" maxlength="80" required />
+                </div>
+                <div class="field">
+                  <label for="sorteo-contacto">Usuario de TikTok o teléfono</label>
+                  <input type="text" id="sorteo-contacto" maxlength="120" required />
+                </div>
+                <button type="submit" class="btn btn--full">Participar</button>
+                <p id="sorteo-status" class="status-msg"></p>
+              </form>`
+        }
+      `;
+
+      const form = document.getElementById("form-sorteo");
+      if (form) {
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const statusEl = document.getElementById("sorteo-status");
+          statusEl.textContent = "Enviando…";
+          statusEl.dataset.state = "loading";
+
+          const { error } = await supabaseClient.from("sorteo_participantes").insert({
+            sorteo_id: data.id,
+            nombre: document.getElementById("sorteo-nombre").value.trim(),
+            contacto: document.getElementById("sorteo-contacto").value.trim(),
+          });
+
+          if (error) {
+            statusEl.textContent = "No se pudo enviar, intentá de nuevo.";
+            statusEl.dataset.state = "error";
+            return;
+          }
+
+          localStorage.setItem(key, "1");
+          cargarSorteo();
+        });
+      }
+    }
+
+    supabaseClient
+      .channel("public:sorteos")
+      .on("postgres_changes", { event: "*", schema: "public", table: "sorteos" }, () => cargarSorteo())
+      .subscribe();
+
+    // =====================================================
+    // Muro de mensajes en vivo
+    // =====================================================
+    async function cargarMuro() {
+      const { data } = await supabaseClient
+        .from("mensajes_muro")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(30);
+
+      const lista = document.getElementById("muro-lista");
+      const mensajes = data || [];
+
+      lista.innerHTML = mensajes.length
+        ? mensajes
+            .map(
+              (m) => `
+                <li>
+                  <span class="muro-lista__nombre">${escapeHtml(m.nombre)}</span>${escapeHtml(m.mensaje)}
+                </li>`
+            )
+            .join("")
+        : '<li class="muro-lista__vacio">Todavía no hay mensajes. ¡Sé el primero!</li>';
+    }
+
+    let ultimoEnvioMuro = 0;
+
+    document.getElementById("form-muro").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const ahora = Date.now();
+      if (ahora - ultimoEnvioMuro < 5000) return; // evita spam de clicks
+      ultimoEnvioMuro = ahora;
+
+      const nombre = document.getElementById("muro-nombre").value.trim();
+      const mensaje = document.getElementById("muro-mensaje").value.trim();
+      if (!nombre || !mensaje) return;
+
+      const { error } = await supabaseClient.from("mensajes_muro").insert({ nombre, mensaje });
+      if (!error) {
+        document.getElementById("muro-mensaje").value = "";
+      }
+    });
+
+    supabaseClient
+      .channel("public:mensajes_muro")
+      .on("postgres_changes", { event: "*", schema: "public", table: "mensajes_muro" }, () => cargarMuro())
+      .subscribe();
+
+    // =====================================================
+    // Estado en vivo en tiempo real (cuando el admin togglea)
+    // =====================================================
+    supabaseClient
+      .channel("public:configuracion")
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "configuracion" }, (payload) => {
+        aplicarEstadoEnVivo(payload.new.en_vivo);
+      })
+      .subscribe();
+
     cargarConfiguracion();
+    cargarEncuesta();
+    cargarSorteo();
+    cargarMuro();
   </script>
 </body>
 </html>
