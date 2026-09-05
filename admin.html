@@ -352,21 +352,32 @@
 
       const lista = participantes || [];
 
+      const yaTieneGanador = !!data.ganador_nombre;
+
       cont.innerHTML = `
         <p style="margin:0 0 4px;"><strong>${escapeHtml(data.titulo)}</strong></p>
         ${data.premio ? `<p style="margin:0 0 8px;">Premio: ${escapeHtml(data.premio)}</p>` : ""}
         <p style="margin:0 0 10px;">${lista.length} persona(s) anotada(s).</p>
+        ${
+          yaTieneGanador
+            ? `<p style="font-weight:600; margin:0 0 10px;">🎉 Ganador/a: ${escapeHtml(data.ganador_nombre)} (${escapeHtml(data.ganador_contacto)})</p>`
+            : ""
+        }
         <div style="display:flex; gap:10px; flex-wrap:wrap;">
-          <button type="button" class="btn" id="btn-sortear" ${lista.length === 0 ? "disabled" : ""}>Sortear ganador/a</button>
+          <button type="button" class="btn" id="btn-sortear" ${lista.length === 0 ? "disabled" : ""}>
+            ${yaTieneGanador ? "Sortear de nuevo" : "Sortear ganador/a"}
+          </button>
           <button type="button" class="btn btn--ghost" id="btn-finalizar-sorteo">Finalizar sorteo</button>
         </div>
-        <p id="resultado-sorteo" style="margin-top:14px; font-weight:600;"></p>
       `;
 
-      document.getElementById("btn-sortear").addEventListener("click", () => {
+      document.getElementById("btn-sortear").addEventListener("click", async () => {
         const ganador = lista[Math.floor(Math.random() * lista.length)];
-        document.getElementById("resultado-sorteo").textContent =
-          `🎉 Ganador/a: ${ganador.nombre} (${ganador.contacto})`;
+        await supabaseClient
+          .from("sorteos")
+          .update({ ganador_nombre: ganador.nombre, ganador_contacto: ganador.contacto })
+          .eq("id", data.id);
+        cargarSorteoAdmin();
       });
 
       document.getElementById("btn-finalizar-sorteo").addEventListener("click", async () => {
@@ -411,6 +422,16 @@
     // =====================================================
     // Muro de mensajes (moderación)
     // =====================================================
+    const PALETA_NOMBRES = ["#f4b942", "#4dd0c0", "#ff8a65", "#6fb3ff", "#b98af9", "#b4d94c", "#ff6fa8", "#59d19c"];
+
+    function colorParaNombre(nombre) {
+      let hash = 0;
+      for (let i = 0; i < nombre.length; i++) {
+        hash = (hash * 31 + nombre.charCodeAt(i)) >>> 0;
+      }
+      return PALETA_NOMBRES[hash % PALETA_NOMBRES.length];
+    }
+
     async function cargarMuroAdmin() {
       const { data } = await supabaseClient
         .from("mensajes_muro")
@@ -426,7 +447,7 @@
             .map(
               (m) => `
                 <li style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-                  <span><span class="muro-lista__nombre">${escapeHtml(m.nombre)}</span>${escapeHtml(m.mensaje)}</span>
+                  <span><span class="muro-lista__nombre" style="color:${colorParaNombre(m.nombre)}">${escapeHtml(m.nombre)}</span>${escapeHtml(m.mensaje)}</span>
                   <button type="button" class="link-remove" data-id="${m.id}">Borrar</button>
                 </li>`
             )

@@ -564,7 +564,6 @@ a { color: inherit; }
 .muro-lista li:first-child { border-top: none; }
 
 .muro-lista__nombre {
-  color: var(--amber);
   font-weight: 600;
   margin-right: 6px;
 }
