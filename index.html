@@ -31,11 +31,9 @@
 
   <main class="wrap">
     <section class="console">
-      <div class="console__inner">
+      <div class="console__inner" id="console-content">
         <span class="console__label">REPRODUCTOR</span>
-        <p style="margin:0; max-width:36ch;">
-          Acá va el embed del vivo de TikTok o el reproductor de streaming.
-        </p>
+        <p style="margin:0; max-width:36ch;">Cargando…</p>
       </div>
     </section>
 
@@ -78,6 +76,24 @@
       document.getElementById("hero-nombre").textContent = data.nombre_radio;
       document.getElementById("footer-nombre").textContent = data.nombre_radio;
       document.getElementById("topbar-handle").textContent = `@${data.usuario_tiktok || "..."}`;
+
+      const consoleContent = document.getElementById("console-content");
+      if (data.usuario_tiktok) {
+        const url = `https://www.tiktok.com/@${encodeURIComponent(data.usuario_tiktok)}/live`;
+        consoleContent.innerHTML = `
+          <span class="console__label">REPRODUCTOR</span>
+          <p style="margin:0; max-width:36ch;">
+            TikTok no permite embeber el vivo directamente en otros sitios.
+            Tocá el botón para verlo en TikTok.
+          </p>
+          <a class="btn" href="${url}" target="_blank" rel="noopener noreferrer">
+            Ver en vivo en TikTok
+          </a>`;
+      } else {
+        consoleContent.innerHTML = `
+          <span class="console__label">REPRODUCTOR</span>
+          <p style="margin:0; max-width:36ch;">Todavía no configuraste un usuario de TikTok.</p>`;
+      }
 
       const lista = document.getElementById("lista-novedades");
       const novedades = Array.isArray(data.novedades) ? data.novedades : [];
